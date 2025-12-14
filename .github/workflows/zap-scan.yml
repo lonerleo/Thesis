@@ -21,14 +21,74 @@ on:
     - cron: '0 2 * * *'
 
 env:
-  # Replace with your EC2 instance URL
-  TARGET_URL: ${{ inputs.target_url || secrets.PET_CLINIC_URL || 'http://your-ec2-public-ip:8080' }}
+  # DVWA Application Server
+  DVWA_HOST: '13.49.91.130'
+  TARGET_URL: ${{ inputs.target_url || 'http://13.49.91.130' }}
+  # ZAP Server
+  ZAP_HOST: '51.21.57.0'
+  ZAP_PORT: '8080'
+  ZAP_API_KEY: ${{ secrets.ZAP_API_KEY }}
   ZAP_VERSION: 'stable'
 
 jobs:
-  zap-baseline-scan:
-    name: ZAP Baseline Scan
+  deploy-dvwa:
+    name: Deploy DVWA Application
     runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ env.DVWA_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy DVWA Application to EC2
+        run: |
+          echo "Deploying to DVWA server at ${{ env.DVWA_HOST }}..."
+          
+          # Copy application files to EC2 (if you have app changes)
+          # scp -i ~/.ssh/id_rsa -r ./app-files ubuntu@${{ env.DVWA_HOST }}:/path/to/dvwa/
+          
+          # SSH into EC2 and restart/update DVWA container
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ env.DVWA_HOST }} << 'EOF'
+            echo "Pulling latest DVWA image..."
+            sudo docker pull vulnerables/web-dvwa:latest
+            
+            echo "Stopping existing DVWA container..."
+            sudo docker stop $(sudo docker ps -q --filter ancestor=vulnerables/web-dvwa) || true
+            sudo docker rm $(sudo docker ps -aq --filter ancestor=vulnerables/web-dvwa) || true
+            
+            echo "Starting new DVWA container..."
+            sudo docker run -d -p 80:80 vulnerables/web-dvwa:latest
+            
+            echo "Waiting for DVWA to be ready..."
+            sleep 30
+            
+            echo "DVWA deployment completed!"
+          EOF
+
+      - name: Verify DVWA is Running
+        run: |
+          echo "Checking if DVWA is accessible..."
+          for i in {1..10}; do
+            if curl -f -s -o /dev/null http://${{ env.DVWA_HOST }}; then
+              echo "✅ DVWA is up and running!"
+              exit 0
+            fi
+            echo "Waiting for DVWA... (attempt $i/10)"
+            sleep 10
+          done
+          echo "❌ DVWA is not responding"
+          exit 1
+
+  zap-baseline-scan:
+    name: ZAP Baseline Scan using Remote ZAP
+    runs-on: ubuntu-latest
+    needs: deploy-dvwa
     
     steps:
       - name: Checkout code
@@ -37,7 +97,19 @@ jobs:
       - name: Create ZAP reports directory
         run: mkdir -p zap-reports
 
-      - name: ZAP Baseline Scan
+      - name: Install ZAP Python Client
+        run: |
+          pip install python-owasp-zap-v2.4
+
+      - name: Run ZAP Scan via Remote ZAP Instance
+        env:
+          SCAN_TYPE: 'baseline'
+        run: |
+          python3 zap-remote-scan.py
+        continue-on-error: false
+
+      - name: Alternative - ZAP Docker Baseline Scan
+        if: failure()
         uses: zaproxy/action-baseline@v0.12.0
         with:
           target: ${{ env.TARGET_URL }}
@@ -48,15 +120,14 @@ jobs:
           fail_action: false
           allow_issue_writing: true
 
-      - name: Upload ZAP Scan Report
+      - name: Upload ZAP Scan Reports
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: zap-baseline-report
           path: |
-            report_html.html
-            report_json.json
-            report_md.md
+            zap-reports/*.html
+            zap-reports/*.json
           retention-days: 30
 
   zap-full-scan:
