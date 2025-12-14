@@ -1,0 +1,59 @@
+# ZAP Scanning Rules Configuration
+# Format: <ruleId>	<threshold>	<strength>
+# 
+# Rule IDs: Specific vulnerability check IDs from ZAP
+# Threshold: OFF, DEFAULT, LOW, MEDIUM, HIGH (controls alerting sensitivity)
+# Strength: OFF, DEFAULT, LOW, MEDIUM, HIGH (controls scan intensity)
+#
+# Common thresholds:
+# - OFF: Rule is disabled
+# - DEFAULT: Use ZAP's default configuration
+# - LOW: Only report definite vulnerabilities
+# - MEDIUM: Report likely vulnerabilities
+# - HIGH: Report all potential vulnerabilities
+#
+# Examples of rules to customize:
+
+# Ignore false positives or low-priority issues
+10202	OFF	DEFAULT	# Absence of Anti-CSRF Tokens (if your app doesn't need CSRF protection in certain areas)
+10027	OFF	DEFAULT	# Information Disclosure - Suspicious Comments (often false positives)
+
+# Increase sensitivity for critical vulnerabilities
+40012	HIGH	HIGH	# Cross Site Scripting (Reflected)
+40014	HIGH	HIGH	# Cross Site Scripting (Persistent)
+40018	HIGH	HIGH	# SQL Injection
+90018	HIGH	HIGH	# SQL Injection - MySQL
+90019	HIGH	HIGH	# SQL Injection - Oracle
+90020	HIGH	HIGH	# SQL Injection - PostgreSQL
+90021	HIGH	HIGH	# SQL Injection - SQLite
+
+# Authentication & Session Management
+10010	MEDIUM	MEDIUM	# Cookie No HttpOnly Flag
+10011	MEDIUM	MEDIUM	# Cookie Without Secure Flag
+10017	MEDIUM	MEDIUM	# Cross-Domain JavaScript Source File Inclusion
+
+# Security Headers
+10020	MEDIUM	DEFAULT	# X-Frame-Options Header Not Set
+10021	MEDIUM	DEFAULT	# X-Content-Type-Options Header Missing
+10023	MEDIUM	DEFAULT	# Information Disclosure - Debug Error Messages
+10035	MEDIUM	DEFAULT	# Strict-Transport-Security Header Not Set
+10038	MEDIUM	DEFAULT	# Content Security Policy (CSP) Header Not Set
+
+# Injection Attacks
+40008	HIGH	HIGH	# Parameter Tampering
+40009	HIGH	HIGH	# Server Side Include
+40013	HIGH	HIGH	# HTTP Parameter Pollution
+40016	HIGH	HIGH	# Cross Site Scripting (Persistent) - Prime
+40017	HIGH	HIGH	# Cross Site Scripting (Persistent) - Spider
+
+# Path Traversal
+6	HIGH	HIGH	# Path Traversal
+
+# Remote Code Execution
+90019	HIGH	HIGH	# Code Injection
+90020	HIGH	HIGH	# Remote OS Command Injection
+
+# Information Disclosure
+10096	LOW	DEFAULT	# Timestamp Disclosure
+10049	LOW	DEFAULT	# Content Cacheability
+10055	LOW	DEFAULT	# CSP Scanner
