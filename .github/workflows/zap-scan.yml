@@ -107,26 +107,7 @@ jobs:
           echo "Triggering ZAP scan on Windows server (51.21.57.0)..."
           echo "Target: DVWA at 13.49.91.130"
           
-          ssh -i ~/.ssh/id_rsa Administrator@${{ env.ZAP_HOST }} << 'ENDSSH'
-            cd "C:\Program Files\ZAP\Zed Attack Proxy"
-            
-            Write-Host "=== Running ZAP Baseline Scan ==="
-            
-            # Run ZAP scan using the installed ZAP
-            .\zap.bat -cmd `
-              -quickurl http://13.49.91.130 `
-              -quickout "C:\zap-reports\baseline-report.html" `
-              -quickprogress
-            
-            Write-Host "=== Scan completed ==="
-            
-            # Generate additional reports
-            if (Test-Path "C:\zap-reports\baseline-report.html") {
-              Write-Host "Report generated successfully"
-            } else {
-              Write-Host "Warning: Report not found"
-            }
-          ENDSSH
+          ssh -i ~/.ssh/id_rsa Administrator@${{ env.ZAP_HOST }} "powershell -Command \"& { cd 'C:\\Program Files\\ZAP\\Zed Attack Proxy'; Write-Host '=== Running ZAP Baseline Scan ==='; .\\zap.bat -cmd -quickurl http://13.49.91.130 -quickout 'C:\\zap-reports\\baseline-report.html' -quickprogress; Write-Host '=== Scan completed ==='; if (Test-Path 'C:\\zap-reports\\baseline-report.html') { Write-Host 'Report generated successfully' } else { Write-Host 'Warning: Report not found' } }\""
           
           echo "✅ ZAP scan completed on Windows server"
 
