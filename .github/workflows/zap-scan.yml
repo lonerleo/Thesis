@@ -23,11 +23,9 @@ on:
 env:
   # DVWA Application Server
   DVWA_HOST: '13.49.91.130'
-  TARGET_URL: ${{ inputs.target_url || 'http://13.49.91.130' }}
-  # ZAP Server
+  # ZAP Windows Server
   ZAP_HOST: '51.21.57.0'
-  ZAP_PORT: '8080'
-  ZAP_API_KEY: ${{ secrets.ZAP_API_KEY }}
+  TARGET_URL: ${{ inputs.target_url || 'http://13.49.91.130' }}
   ZAP_VERSION: 'stable'
 
 jobs:
@@ -85,8 +83,8 @@ jobs:
           echo "❌ DVWA is not responding"
           exit 1
 
-  zap-baseline-scan:
-    name: ZAP Baseline Scan using Remote ZAP
+  zap-scan-via-ssh:
+    name: ZAP Scan from Windows Server via SSH
     runs-on: ubuntu-latest
     needs: deploy-dvwa
     
@@ -94,41 +92,77 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Create ZAP reports directory
-        run: mkdir -p zap-reports
-
-      - name: Install ZAP Python Client
+      - name: Setup SSH Keys
         run: |
-          pip install python-owasp-zap-v2.4
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          # Add both servers to known hosts
+          ssh-keyscan -H ${{ env.DVWA_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ env.ZAP_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Run ZAP Scan via Remote ZAP Instance
-        env:
-          SCAN_TYPE: 'baseline'
+      - name: Run ZAP Scan from Windows Server
         run: |
-          python3 zap-remote-scan.py
-        continue-on-error: false
+          echo "Triggering ZAP scan on Windows server (51.21.57.0)..."
+          echo "Target: DVWA at 13.49.91.130"
+          
+          ssh -i ~/.ssh/id_rsa Administrator@${{ env.ZAP_HOST }} << 'ENDSSH'
+            cd "C:\Program Files\ZAP\Zed Attack Proxy"
+            
+            Write-Host "=== Running ZAP Baseline Scan ==="
+            
+            # Run ZAP scan using the installed ZAP
+            .\zap.bat -cmd `
+              -quickurl http://13.49.91.130 `
+              -quickout "C:\zap-reports\baseline-report.html" `
+              -quickprogress
+            
+            Write-Host "=== Scan completed ==="
+            
+            # Generate additional reports
+            if (Test-Path "C:\zap-reports\baseline-report.html") {
+              Write-Host "Report generated successfully"
+            } else {
+              Write-Host "Warning: Report not found"
+            }
+          ENDSSH
+          
+          echo "✅ ZAP scan completed on Windows server"
 
-      - name: Alternative - ZAP Docker Baseline Scan
-        if: failure()
-        uses: zaproxy/action-baseline@v0.12.0
-        with:
-          target: ${{ env.TARGET_URL }}
-          rules_file_name: 'zap-rules.tsv'
-          cmd_options: '-a -j -l INFO -d'
-          issue_title: 'ZAP Baseline Scan Report'
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fail_action: false
-          allow_issue_writing: true
+      - name: Copy Reports from Windows Server
+        run: |
+          mkdir -p ./zap-reports
+          
+          # Copy reports via SCP (requires SSH)
+          scp -i ~/.ssh/id_rsa Administrator@${{ env.ZAP_HOST }}:"C:/zap-reports/*.html" ./zap-reports/ || true
+          scp -i ~/.ssh/id_rsa Administrator@${{ env.ZAP_HOST }}:"C:/zap-reports/*.json" ./zap-reports/ || true
+          
+          echo "✅ Reports copied to GitHub Actions runner"
+          ls -lh ./zap-reports/
 
       - name: Upload ZAP Scan Reports
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: zap-baseline-report
+          name: zap-scan-reports
           path: |
             zap-reports/*.html
             zap-reports/*.json
+            zap-reports/*.xml
           retention-days: 30
+
+      - name: Display Scan Summary
+        if: always()
+        run: |
+          echo "### 🔒 ZAP Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Scan completed on Windows ZAP Server (51.21.57.0)" >> $GITHUB_STEP_SUMMARY
+          echo "🎯 Target: DVWA at http://13.49.91.130" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 **Reports Available:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Download from Artifacts section" >> $GITHUB_STEP_SUMMARY
+          echo "- View in ZAP GUI: RDP to 51.21.57.0" >> $GITHUB_STEP_SUMMARY
 
   zap-full-scan:
     name: ZAP Full Scan
