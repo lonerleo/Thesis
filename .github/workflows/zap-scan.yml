@@ -175,14 +175,18 @@ jobs:
             --command-id "$COPY_COMMAND_ID" \
             --instance-id "${{ secrets.WINDOWS_INSTANCE_ID }}" \
             --query 'StandardOutputContent' \
-            --output text)
+            --output text 2>/dev/null || echo "")
+          
+          echo "Report content preview: ${REPORT_BASE64:0:100}..."
           
           # Decode and save report
-          if [ ! -z "$REPORT_BASE64" ]; then
-            echo "$REPORT_BASE64" | base64 -d > ./zap-reports/baseline-report.html
-            echo "✅ Report downloaded successfully"
+          if [ ! -z "$REPORT_BASE64" ] && [ "$REPORT_BASE64" != "REPORT_NOT_FOUND" ]; then
+            # Remove any whitespace/newlines and decode
+            echo "$REPORT_BASE64" | tr -d '\n\r ' | base64 -d > ./zap-reports/baseline-report.html 2>/dev/null && \
+              echo "✅ Report downloaded successfully" || \
+              echo "⚠️ Failed to decode report"
           else
-            echo "⚠️ No report generated"
+            echo "⚠️ No report generated or report not found"
           fi
           
           ls -lh ./zap-reports/ || true
