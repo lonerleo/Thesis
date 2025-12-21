@@ -109,7 +109,7 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ secrets.WINDOWS_INSTANCE_ID }}" \
             --document-name "AWS-RunPowerShellScript" \
-            --parameters 'commands=["cd \"C:\\Program Files\\ZAP\\Zed Attack Proxy\"; Write-Host \"=== Running ZAP Baseline Scan ===\"; .\\zap.bat -cmd -quickurl http://13.49.91.130 -quickout \"C:\\zap-reports\\baseline-report.html\" -quickprogress; Write-Host \"=== Scan completed ===\""]' \
+            --parameters 'commands=["if (-not (Test-Path \"C:\\zap-reports\")) { New-Item -ItemType Directory -Path \"C:\\zap-reports\" -Force | Out-Null }; cd \"C:\\Program Files\\ZAP\\Zed Attack Proxy\"; Write-Host \"=== Running ZAP Baseline Scan ===\"; .\\zap.bat -cmd -quickurl http://13.49.91.130 -quickout \"C:\\zap-reports\\baseline-report.html\" -quickprogress; Start-Sleep -Seconds 2; Write-Host \"=== Scan completed ===\"; if (Test-Path \"C:\\zap-reports\\baseline-report.html\") { Write-Host \"Report file created: $(Get-Item C:\\zap-reports\\baseline-report.html | Select-Object -ExpandProperty Length) bytes\" } else { Write-Host \"ERROR: Report file was not created\" }"]' \
             --output text \
             --query "Command.CommandId")
           
