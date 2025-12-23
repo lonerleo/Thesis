@@ -69,10 +69,6 @@ jobs:
             echo "DVWA deployment completed!"
           EOF
 
-      - name: Ensure DVWA Docker is running
-        run: |
-          ssh -i ~/.ssh/id_rsa ubuntu@${{ env.DVWA_HOST }} "docker start dvwa || docker run -d --name dvwa -p 80:80 vulnerables/web-dvwa"
-
       - name: Verify DVWA is Running
         run: |
           echo "Checking if DVWA is accessible..."
@@ -206,6 +202,15 @@ jobs:
             zap-reports/*.json
             zap-reports/*.xml
           retention-days: 30
+
+      - name: Save ZAP Scan Reports Locally
+        if: always()
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/zap-scan-results
+          cp zap-reports/*.html $GITHUB_WORKSPACE/zap-scan-results/ 2>/dev/null || true
+          cp zap-reports/*.json $GITHUB_WORKSPACE/zap-scan-results/ 2>/dev/null || true
+          cp zap-reports/*.xml $GITHUB_WORKSPACE/zap-scan-results/ 2>/dev/null || true
+          echo "Reports saved to $GITHUB_WORKSPACE/zap-scan-results"
 
       - name: Display Scan Summary
         if: always()
