@@ -366,12 +366,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download ZAP Reports
-        uses: actions/download-artifact@v4
-        with:
-          name: zap-scan-reports
-          path: ./zap-reports
-
       - name: Parse ZAP Results
         id: parse_results
         run: |
