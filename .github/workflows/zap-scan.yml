@@ -421,3 +421,16 @@ jobs:
               repo: context.repo.repo,
               body: comment
             });
+
+      - name: Upload All ZAP Reports (robust)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-scan-reports
+          path: zap-reports/
+          retention-days: 90
+
+      - name: Print Artifact Download Link
+        if: always()
+        run: |
+          echo "### 📥 [Download ZAP Scan Reports](../../artifacts)" >> $GITHUB_STEP_SUMMARY
