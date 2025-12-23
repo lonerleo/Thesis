@@ -69,6 +69,10 @@ jobs:
             echo "DVWA deployment completed!"
           EOF
 
+      - name: Ensure DVWA Docker is running
+        run: |
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ env.DVWA_HOST }} "docker start dvwa || docker run -d --name dvwa -p 80:80 vulnerables/web-dvwa"
+
       - name: Verify DVWA is Running
         run: |
           echo "Checking if DVWA is accessible..."
