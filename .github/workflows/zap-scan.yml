@@ -105,11 +105,28 @@ jobs:
           echo "Triggering ZAP scan on Windows server via SSM..."
           echo "Target: DVWA at 13.49.91.130"
           
-          # Send command via SSM - use ZAP baseline script
+          # Send command via SSM - use only ZAP .bat CLI, absolute paths, robust logging
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ secrets.WINDOWS_INSTANCE_ID }}" \
             --document-name "AWS-RunPowerShellScript" \
-            --parameters 'commands=["$ErrorActionPreference = \"Continue\"; if (-not (Test-Path \"C:\\zap-reports\")) { New-Item -ItemType Directory -Path \"C:\\zap-reports\" -Force | Out-Null }; Write-Host \"=== Running ZAP Baseline Scan ===\"; cd \"C:\\Program Files\\ZAP\\Zed Attack Proxy\"; $env:PATH += \";C:\\Program Files\\ZAP\\Zed Attack Proxy\"; try { python .\\zap-baseline.py -t http://13.49.91.130 -r baseline-report.html -w baseline-report.md -J baseline-report.json 2>&1 | Tee-Object -Variable output; Write-Host $output } catch { Write-Host \"Python scan failed: $_\"; Write-Host \"Trying alternative method...\"; .\\zap.bat -cmd -quickurl http://13.49.91.130 2>&1 }; Write-Host \"=== Moving reports ===\"; Get-ChildItem -Path . -Filter \"baseline-report.*\" | ForEach-Object { Write-Host \"Found: $($_.Name)\"; Move-Item -Path $_.FullName -Destination \"C:\\zap-reports\\\" -Force }; Write-Host \"=== Scan completed ===\"; if (Test-Path \"C:\\zap-reports\\baseline-report.html\") { Write-Host \"SUCCESS: Report created - $((Get-Item C:\\zap-reports\\baseline-report.html).Length) bytes\" } else { Write-Host \"ERROR: No report found\"; Write-Host \"Files in current directory:\"; Get-ChildItem | Select-Object Name, Length }"]' \
+            --parameters 'commands=[
+              "if (-not (Test-Path \"C:\\zap-reports\")) { New-Item -ItemType Directory -Path \"C:\\zap-reports\" -Force | Out-Null };
+              cd \"C:\\Program Files\\ZAP\\Zed Attack Proxy\";
+              Write-Host \"=== Running ZAP Baseline Scan ===\";
+              .\\zap.bat -cmd -quickurl http://13.49.91.130 -quickout \"C:\\zap-reports\\baseline-report.html\" -quickprogress *>&1 | Tee-Object \"C:\\zap-reports\\zap-output.txt\";
+              Write-Host \"=== Scan completed ===\";
+              if (Test-Path \"C:\\zap-reports\\baseline-report.html\") {
+                Write-Host \"SUCCESS: Report created\";
+                $size = (Get-Item \"C:\\zap-reports\\baseline-report.html\").Length;
+                Write-Host \"Report size: $size bytes\";
+              } else {
+                Write-Host \"ERROR: No report found\";
+                Write-Host \"Files in C:\\zap-reports:\";
+                Get-ChildItem \"C:\\zap-reports\" | Select-Object Name, Length;
+                Write-Host \"--- zap-output.txt ---\";
+                if (Test-Path \"C:\\zap-reports\\zap-output.txt\") { Get-Content \"C:\\zap-reports\\zap-output.txt\" }
+              }
+            ]' \
             --timeout-seconds 600 \
             --output text \
             --query "Command.CommandId")
@@ -125,9 +142,7 @@ jobs:
               --instance-id "${{ secrets.WINDOWS_INSTANCE_ID }}" \
               --query 'Status' \
               --output text 2>/dev/null || echo "Pending")
-            
             echo "Status: $STATUS (attempt $i/60)"
-            
             if [ "$STATUS" = "Success" ] || [ "$STATUS" = "Failed" ]; then
               break
             fi
