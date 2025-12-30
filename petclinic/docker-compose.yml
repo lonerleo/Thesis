@@ -5,6 +5,7 @@
 # test: trigger workflow (2025-12-30)
 # Trigger: test workflow run (2025-12-30)
 # test: trigger workflow
+# trigger: petclinic zap full scan via ssm (2025-12-30)
 version: '3.8'
 # TEST COMMENT: Trigger PetClinic workflow only
 # ANOTHER TEST COMMENT: Trigger PetClinic workflow and ZAP full scan
