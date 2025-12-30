@@ -11,3 +11,5 @@ This folder will contain automation and deployment scripts for running a vulnera
 
 # NOTE: This is a test change to trigger the PetClinic workflow and verify end-to-end automation.
 # PetClinic should be deployed on port 8081, verified, and scanned by ZAP as per the workflow.
+
+# Test comment to trigger PetClinic full scan workflow on push.
