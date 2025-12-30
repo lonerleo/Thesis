@@ -1,5 +1,7 @@
 name: DVWA ZAP DAST Scan
 
+# Note: DVWA workflow trigger comment (2025-12-30) for traceability
+
 on:
   push:
     paths:
