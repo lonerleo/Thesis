@@ -1,3 +1,4 @@
+# test: trigger workflow
 version: '3.8'
 # TEST COMMENT: Trigger PetClinic workflow only
 # ANOTHER TEST COMMENT: Trigger PetClinic workflow and ZAP full scan
