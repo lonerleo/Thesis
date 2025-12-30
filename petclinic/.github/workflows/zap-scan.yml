@@ -1,4 +1,3 @@
-
 name: PetClinic ZAP DAST Scan
 
 on:
@@ -173,3 +172,33 @@ jobs:
           echo "📊 **Reports Available:**" >> $GITHUB_STEP_SUMMARY
           echo "- Download from Artifacts section" >> $GITHUB_STEP_SUMMARY
           echo "- View in ZAP GUI: RDP to 51.21.57.0" >> $GITHUB_STEP_SUMMARY
+
+  zap-full-scan:
+    name: ZAP Full Scan (PetClinic)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Create ZAP reports directory
+        run: mkdir -p zap-reports
+      - name: ZAP Full Scan
+        uses: zaproxy/action-full-scan@v0.10.0
+        with:
+          target: ${{ env.TARGET_URL }}
+          rules_file_name: 'zap-rules.tsv'
+          cmd_options: '-a -j -l INFO'
+          issue_title: 'ZAP Full Scan Report (PetClinic)'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fail_action: false
+          allow_issue_writing: true
+      - name: Upload ZAP Full Scan Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-petclinic-full-scan-report
+          path: |
+            report_html.html
+            report_json.json
+            report_md.md
+          retention-days: 30
