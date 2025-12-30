@@ -1,0 +1,2 @@
+# Test trigger for PetClinic workflow
+# This file is used to test the workflow trigger after refactor.
