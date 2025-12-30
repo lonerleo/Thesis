@@ -20,7 +20,7 @@ env:
   PETCLINIC_HOST: '13.49.91.130' # Change to your PetClinic EC2 IP
   PETCLINIC_PORT: '8081'
   ZAP_HOST: '51.21.57.0'
-  TARGET_URL: ${{ inputs.target_url || format('http://{0}:{1}', env.PETCLINIC_HOST, env.PETCLINIC_PORT) }}
+  TARGET_URL: ${{ inputs.target_url != '' && inputs.target_url || 'http://13.49.91.130:8081' }}
   ZAP_VERSION: 'stable'
 
 jobs:
