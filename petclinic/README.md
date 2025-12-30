@@ -8,3 +8,6 @@ This folder will contain automation and deployment scripts for running a vulnera
 ## Next Steps
 - Add Docker Compose or deployment scripts for PetClinic
 - Update the workflow to deploy and scan PetClinic as well
+
+# NOTE: This is a test change to trigger the PetClinic workflow and verify end-to-end automation.
+# PetClinic should be deployed on port 8081, verified, and scanned by ZAP as per the workflow.
