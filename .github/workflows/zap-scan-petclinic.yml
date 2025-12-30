@@ -47,7 +47,7 @@ jobs:
             sudo docker stop $(sudo docker ps -q --filter ancestor=springcommunity/spring-petclinic-rest) || true
             sudo docker rm $(sudo docker ps -aq --filter ancestor=springcommunity/spring-petclinic-rest) || true
             echo "Starting new PetClinic container on port 8082..."
-            sudo docker run -d --name petclinic -p 8082:8080 springcommunity/spring-petclinic-rest:latest
+            sudo docker run -d --name petclinic -p 8082:9966 springcommunity/spring-petclinic-rest:latest
             echo "Waiting for PetClinic to be ready..."
             sleep 30
             echo "PetClinic deployment completed!"
@@ -56,7 +56,7 @@ jobs:
         run: |
           echo "Checking if PetClinic is accessible..."
           for i in {1..10}; do
-            if curl -f -s -o /dev/null http://${{ env.PETCLINIC_HOST }}:${{ env.PETCLINIC_PORT }}; then
+            if curl -f -s -o /dev/null http://${{ env.PETCLINIC_HOST }}:${{ env.PETCLINIC_PORT }}/petclinic; then
               echo "✅ PetClinic is up and running!"
               exit 0
             fi
