@@ -8,7 +8,7 @@
 version: '3.8'
 # TEST COMMENT: Trigger PetClinic workflow only
 # ANOTHER TEST COMMENT: Trigger PetClinic workflow and ZAP full scan
-# FINAL TEST COMMENT: Workflow fix validationnkk
+# FINAL TEST COMMENT: Workflow fix validationnkkll
 services:
   petclinic:
     image: springcommunity/spring-petclinic-rest
