@@ -19,9 +19,9 @@ on:
 
 env:
   PETCLINIC_HOST: '13.49.91.130'
-  PETCLINIC_PORT: '8081'
+  PETCLINIC_PORT: '8082'
   ZAP_HOST: '51.21.57.0'
-  TARGET_URL: ${{ inputs.target_url != '' && inputs.target_url || 'http://13.49.91.130:8081' }}
+  TARGET_URL: ${{ inputs.target_url != '' && inputs.target_url || 'http://13.49.91.130:8082' }}
   ZAP_VERSION: 'stable'
 
 jobs:
@@ -46,8 +46,8 @@ jobs:
             echo "Stopping existing PetClinic container..."
             sudo docker stop $(sudo docker ps -q --filter ancestor=springcommunity/spring-petclinic-rest) || true
             sudo docker rm $(sudo docker ps -aq --filter ancestor=springcommunity/spring-petclinic-rest) || true
-            echo "Starting new PetClinic container on port 8081..."
-            sudo docker run -d --name petclinic -p 8081:8080 springcommunity/spring-petclinic-rest:latest
+            echo "Starting new PetClinic container on port 8082..."
+            sudo docker run -d --name petclinic -p 8082:8080 springcommunity/spring-petclinic-rest:latest
             echo "Waiting for PetClinic to be ready..."
             sleep 30
             echo "PetClinic deployment completed!"
