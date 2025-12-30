@@ -1,3 +1,37 @@
+      - name: Run ZAP Full Scan via Systems Manager
+        id: run-zap-full
+        run: |
+          echo "Triggering ZAP full scan on Windows server via SSM..."
+          echo "Target: PetClinic at ${{ env.PETCLINIC_HOST }}:${{ env.PETCLINIC_PORT }}"
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ secrets.WINDOWS_INSTANCE_ID }}" \
+            --document-name "AWS-RunPowerShellScript" \
+            --parameters '{"commands":["Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; if (-not (Test-Path \"C:\\zap-reports\")) { New-Item -ItemType Directory -Path \"C:\\zap-reports\" -Force | Out-Null }; cd \"C:\\Program Files\\ZAP\\Zed Attack Proxy\"; Write-Host \"=== Running ZAP Full Scan ===\"; .\\zap.bat -cmd -port 8090 -quickurl http://${{ env.PETCLINIC_HOST }}:${{ env.PETCLINIC_PORT }}/petclinic -quickout \"C:\\zap-reports\\petclinic-fullscan-report.html\" -quickprogress *>&1 | Tee-Object \"C:\\zap-reports\\zap-fullscan-output.txt\"; Write-Host \"=== Full Scan completed ===\"; if (Test-Path \"C:\\zap-reports\\petclinic-fullscan-report.html\") { Write-Host \"SUCCESS: Full Scan Report created\"; $size = (Get-Item \"C:\\zap-reports\\petclinic-fullscan-report.html\").Length; Write-Host \"Report size: $size bytes\" } else { Write-Host \"ERROR: No full scan report found\"; Write-Host \"Files in C:\\zap-reports:\\"; Get-ChildItem \"C:\\zap-reports\" | Select-Object Name, Length; Write-Host \"--- zap-fullscan-output.txt ---\"; if (Test-Path \"C:\\zap-reports\\zap-fullscan-output.txt\") { Get-Content \"C:\\zap-reports\\zap-fullscan-output.txt\" } }; if (Test-Path \"C:\\Program Files\\ZAP\\Zed Attack Proxy\\zap-report-pdf.bat\") { & \"C:\\Program Files\\ZAP\\Zed Attack Proxy\\zap-report-pdf.bat\" \"C:\\zap-reports\\petclinic-fullscan-report.html\" \"C:\\zap-reports\\petclinic-fullscan-report.pdf\" } else { Write-Host \"PDF export script not found, skipping PDF export.\" }"]}' \
+            --timeout-seconds 1200 \
+            --output text \
+            --query "Command.CommandId")
+          echo "Command ID: $COMMAND_ID"
+          echo "command_id=$COMMAND_ID" >> $GITHUB_OUTPUT
+          echo "Waiting for full scan to complete..."
+          for i in {1..120}; do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "${{ secrets.WINDOWS_INSTANCE_ID }}" \
+              --query 'Status' \
+              --output text 2>/dev/null || echo "Pending")
+            echo "Status: $STATUS (attempt $i/120)"
+            if [ "$STATUS" = "Success" ] || [ "$STATUS" = "Failed" ]; then
+              break
+            fi
+            sleep 5
+          done
+          echo "=== ZAP Full Scan Output ==="
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ secrets.WINDOWS_INSTANCE_ID }}" \
+            --query 'StandardOutputContent' \
+            --output text || echo "No output available"
+          echo "✅ ZAP full scan completed on Windows server"
 
 name: PetClinic ZAP DAST Scan
 
@@ -81,40 +115,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-north-1
-      - name: Run ZAP Full Scan via Systems Manager
-        id: run-zap-full
-        run: |
-          echo "Triggering ZAP full scan on Windows server via SSM..."
-          echo "Target: PetClinic at ${{ env.PETCLINIC_HOST }}:${{ env.PETCLINIC_PORT }}"
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "${{ secrets.WINDOWS_INSTANCE_ID }}" \
-            --document-name "AWS-RunPowerShellScript" \
-            --parameters "{\"commands\":[\"Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; if (-not (Test-Path \\\"C:\\zap-reports\\\")) { New-Item -ItemType Directory -Path \\\"C:\\zap-reports\\\" -Force | Out-Null }; cd \\\"C:\\Program Files\\ZAP\\Zed Attack Proxy\\\"; Write-Host \\\"=== Running ZAP Full Scan ===\\\"; .\\\\zap.bat -cmd -port 8090 -quickurl http://${{ env.PETCLINIC_HOST }}:${{ env.PETCLINIC_PORT }}/petclinic -quickout \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\" -quickprogress *>&1 | Tee-Object \\\"C:\\zap-reports\\zap-fullscan-output.txt\\\"; Write-Host \\\"=== Full Scan completed ===\\\"; if (Test-Path \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\") { Write-Host \\\"SUCCESS: Full Scan Report created\\\"; $size = (Get-Item \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\").Length; Write-Host \\\"Report size: $size bytes\\\" } else { Write-Host \\\"ERROR: No full scan report found\\\"; Write-Host \\\"Files in C:\\zap-reports:\\\"; Get-ChildItem \\\"C:\\zap-reports\\\" | Select-Object Name, Length; Write-Host \\\"--- zap-fullscan-output.txt ---\\\"; if (Test-Path \\\"C:\\zap-reports\\zap-fullscan-output.txt\\\") { Get-Content \\\"C:\\zap-reports\\zap-fullscan-output.txt\\\" } }; if (Test-Path \\\"C:\\Program Files\\ZAP\\Zed Attack Proxy\\zap-report-pdf.bat\\\") { & \\\"C:\\Program Files\\ZAP\\Zed Attack Proxy\\zap-report-pdf.bat\\\" \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\" \\\"C:\\zap-reports\\petclinic-fullscan-report.pdf\\\" } else { Write-Host \\\"PDF export script not found, skipping PDF export.\\\" }\"]}" \
-              --timeout-seconds 1200 \
-              --output text \
-              --query "Command.CommandId")
-          echo "Command ID: $COMMAND_ID"
-          echo "command_id=$COMMAND_ID" >> $GITHUB_OUTPUT
-          echo "Waiting for full scan to complete..."
-          for i in {1..120}; do
-            STATUS=$(aws ssm get-command-invocation \
-              --command-id "$COMMAND_ID" \
-              --instance-id "${{ secrets.WINDOWS_INSTANCE_ID }}" \
-              --query 'Status' \
-              --output text 2>/dev/null || echo "Pending")
-            echo "Status: $STATUS (attempt $i/120)"
-            if [ "$STATUS" = "Success" ] || [ "$STATUS" = "Failed" ]; then
-              break
-            fi
-            sleep 5
-          done
-          echo "=== ZAP Full Scan Output ==="
-          aws ssm get-command-invocation \
-            --command-id "$COMMAND_ID" \
-            --instance-id "${{ secrets.WINDOWS_INSTANCE_ID }}" \
-            --query 'StandardOutputContent' \
-            --output text || echo "No output available"
-          echo "✅ ZAP full scan completed on Windows server"
       - name: Download Full Scan Reports from Windows Server
         run: |
           mkdir -p ./zap-reports
