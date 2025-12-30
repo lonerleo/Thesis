@@ -206,6 +206,7 @@ jobs:
     name: ZAP Full Scan from Windows Server via SSM
     runs-on: ubuntu-latest
     needs: deploy-petclinic
+    # Run on all triggers (push, PR, schedule, workflow_dispatch)
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
