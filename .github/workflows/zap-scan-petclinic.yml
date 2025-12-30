@@ -82,7 +82,7 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ secrets.WINDOWS_INSTANCE_ID }}" \
             --document-name "AWS-RunPowerShellScript" \
-            --parameters '{"commands":["$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; if (-not (Test-Path \\\"C:\\zap-reports\\\")) { New-Item -ItemType Directory -Path \\\"C:\\zap-reports\\\" -Force | Out-Null }; cd \\\"C:\\Program Files\\ZAP\\Zed Attack Proxy\\\"; Write-Host \\\"=== Running ZAP Full Scan (zap-full-scan.py) ===\\\"; .\\\\zap-full-scan.py -t http://${{ env.PETCLINIC_HOST }}:${{ env.PETCLINIC_PORT }}/petclinic -r petclinic-fullscan-report.html -J petclinic-fullscan-report.json -d -I -m 5 -T 600 *>&1 | Tee-Object \\\"C:\\zap-reports\\zap-fullscan-output.txt\\\"; Copy-Item -Path .\\\\petclinic-fullscan-report.html -Destination \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\" -Force -ErrorAction SilentlyContinue; Copy-Item -Path .\\\\petclinic-fullscan-report.json -Destination \\\"C:\\zap-reports\\petclinic-fullscan-report.json\\\" -Force -ErrorAction SilentlyContinue; if (Test-Path \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\") { $size = (Get-Item \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\").Length; Write-Host \\\"SUCCESS: HTML report created ($size bytes)\\\" } else { Write-Host \\\"ERROR: No HTML report found\\\" }; if (Test-Path \\\"C:\\zap-reports\\petclinic-fullscan-report.json\\\") { $jSize = (Get-Item \\\"C:\\zap-reports\\petclinic-fullscan-report.json\\\").Length; Write-Host \\\"JSON report created ($jSize bytes)\\\" } else { Write-Host \\\"No JSON report found\\\" }; Write-Host \\\"Listing C:\\zap-reports\\\"; Get-ChildItem \\\"C:\\zap-reports\\\" | Select-Object Name, Length"]}' \
+            --parameters '{"commands":["Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; if (-not (Test-Path \\\"C:\\zap-reports\\\")) { New-Item -ItemType Directory -Path \\\"C:\\zap-reports\\\" -Force | Out-Null }; cd \\\"C:\\Program Files\\ZAP\\Zed Attack Proxy\\\"; Write-Host \\\"=== Running ZAP Full Scan (zap.bat) ===\\\"; .\\\\zap.bat -cmd -quickurl http://${{ env.PETCLINIC_HOST }}:${{ env.PETCLINIC_PORT }}/petclinic -quickout \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\" -quickprogress *>&1 | Tee-Object \\\"C:\\zap-reports\\zap-fullscan-output.txt\\\"; Write-Host \\\"=== Scan completed ===\\\"; if (Test-Path \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\") { Write-Host \\\"SUCCESS: Report created\\\"; $size = (Get-Item \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\").Length; Write-Host \\\"Report size: $size bytes\\\" } else { Write-Host \\\"ERROR: No report found\\\"; Write-Host \\\"Files in C:\\zap-reports:\\\"; Get-ChildItem \\\"C:\\zap-reports\\\" | Select-Object Name, Length; Write-Host \\\"--- zap-fullscan-output.txt ---\\\"; if (Test-Path \\\"C:\\zap-reports\\zap-fullscan-output.txt\\\") { Get-Content \\\"C:\\zap-reports\\zap-fullscan-output.txt\\\" } }"]}' \
             --timeout-seconds 1800 \
             --output text \
             --query "Command.CommandId")
@@ -111,11 +111,11 @@ jobs:
       - name: Download Full Scan Reports from Windows Server
         run: |
           mkdir -p ./zap-reports
-          for ext in html json; do
+          for ext in html txt; do
             COPY_COMMAND_ID=$(aws ssm send-command \
               --instance-ids "${{ secrets.WINDOWS_INSTANCE_ID }}" \
               --document-name "AWS-RunPowerShellScript" \
-              --parameters "commands=[\"if (Test-Path 'C:\zap-reports\petclinic-fullscan-report.$ext') { [Convert]::ToBase64String([System.IO.File]::ReadAllBytes('C:\zap-reports\petclinic-fullscan-report.$ext')) } else { Write-Host 'REPORT_NOT_FOUND' }\"]" \
+              --parameters "commands=[\"$path = 'C:\zap-reports\' + 'petclinic-fullscan-report.' + '$ext'; if ($ext -eq 'txt') { $path = 'C:\zap-reports\zap-fullscan-output.txt' }; if (Test-Path $path) { [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($path)) } else { Write-Host 'REPORT_NOT_FOUND' }\"]" \
               --output text \
               --query "Command.CommandId")
             echo "Waiting for report download ($ext)..."
@@ -137,7 +137,9 @@ jobs:
               --output text 2>/dev/null || echo "")
             echo "Report content preview ($ext): ${REPORT_BASE64:0:100}..."
             if [ ! -z "$REPORT_BASE64" ] && [ "$REPORT_BASE64" != "REPORT_NOT_FOUND" ]; then
-              echo "$REPORT_BASE64" | tr -d '\n\r ' | base64 -d > ./zap-reports/petclinic-fullscan-report.$ext 2>/dev/null && \
+              OUTFILE=./zap-reports/petclinic-fullscan-report.$ext
+              if [ "$ext" = "txt" ]; then OUTFILE=./zap-reports/zap-fullscan-output.txt; fi
+              echo "$REPORT_BASE64" | tr -d '\n\r ' | base64 -d > "$OUTFILE" 2>/dev/null && \
                 echo "✅ $ext report downloaded successfully" || \
                 echo "⚠️ Failed to decode $ext report"
             else
@@ -152,7 +154,7 @@ jobs:
           name: zap-petclinic-fullscan-reports
           path: |
             zap-reports/petclinic-fullscan-report.html
-            zap-reports/petclinic-fullscan-report.pdf
+            zap-reports/zap-fullscan-output.txt
           retention-days: 30
       - name: Save ZAP Full Scan Reports Locally
         if: always()
