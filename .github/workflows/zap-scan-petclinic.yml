@@ -82,8 +82,8 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ secrets.WINDOWS_INSTANCE_ID }}" \
             --document-name "AWS-RunPowerShellScript" \
-            --parameters '{"commands":["Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; if (-not (Test-Path \\\"C:\\zap-reports\\\")) { New-Item -ItemType Directory -Path \\\"C:\\zap-reports\\\" -Force | Out-Null }; cd \\\"C:\\Program Files\\ZAP\\Zed Attack Proxy\\\"; Write-Host \\\"=== Running ZAP Full Scan ===\\\"; .\\\\zap.bat -cmd -port 8090 -quickurl http://${{ env.PETCLINIC_HOST }}:${{ env.PETCLINIC_PORT }}/petclinic -quickout \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\" -quickprogress *>&1 | Tee-Object \\\"C:\\zap-reports\\zap-fullscan-output.txt\\\"; Write-Host \\\"=== Full Scan completed ===\\\"; if (Test-Path \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\") { Write-Host \\\"SUCCESS: Full Scan Report created\\\"; $size = (Get-Item \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\").Length; Write-Host \\\"Report size: $size bytes\\\" } else { Write-Host \\\"ERROR: No full scan report found\\\"; Write-Host \\\"Files in C:\\zap-reports:\\\"; Get-ChildItem \\\"C:\\zap-reports\\\" | Select-Object Name, Length; Write-Host \\\"--- zap-fullscan-output.txt ---\\\"; if (Test-Path \\\"C:\\zap-reports\\zap-fullscan-output.txt\\\") { Get-Content \\\"C:\\zap-reports\\zap-fullscan-output.txt\\\" } }; if (Test-Path \\\"C:\\Program Files\\ZAP\\Zed Attack Proxy\\zap-report-pdf.bat\\\") { & \\\"C:\\Program Files\\ZAP\\Zed Attack Proxy\\zap-report-pdf.bat\\\" \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\" \\\"C:\\zap-reports\\petclinic-fullscan-report.pdf\\\" } else { Write-Host \\\"PDF export script not found, skipping PDF export.\\\" }"]}' \
-            --timeout-seconds 1200 \
+            --parameters '{"commands":["$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; if (-not (Test-Path \\\"C:\\zap-reports\\\")) { New-Item -ItemType Directory -Path \\\"C:\\zap-reports\\\" -Force | Out-Null }; cd \\\"C:\\Program Files\\ZAP\\Zed Attack Proxy\\\"; Write-Host \\\"=== Running ZAP Full Scan (zap-full-scan.py) ===\\\"; .\\\\zap-full-scan.py -t http://${{ env.PETCLINIC_HOST }}:${{ env.PETCLINIC_PORT }}/petclinic -r petclinic-fullscan-report.html -J petclinic-fullscan-report.json -d -I -m 5 -T 600 *>&1 | Tee-Object \\\"C:\\zap-reports\\zap-fullscan-output.txt\\\"; Copy-Item -Path .\\\\petclinic-fullscan-report.html -Destination \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\" -Force -ErrorAction SilentlyContinue; Copy-Item -Path .\\\\petclinic-fullscan-report.json -Destination \\\"C:\\zap-reports\\petclinic-fullscan-report.json\\\" -Force -ErrorAction SilentlyContinue; if (Test-Path \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\") { $size = (Get-Item \\\"C:\\zap-reports\\petclinic-fullscan-report.html\\\").Length; Write-Host \\\"SUCCESS: HTML report created ($size bytes)\\\" } else { Write-Host \\\"ERROR: No HTML report found\\\" }; if (Test-Path \\\"C:\\zap-reports\\petclinic-fullscan-report.json\\\") { $jSize = (Get-Item \\\"C:\\zap-reports\\petclinic-fullscan-report.json\\\").Length; Write-Host \\\"JSON report created ($jSize bytes)\\\" } else { Write-Host \\\"No JSON report found\\\" }; Write-Host \\\"Listing C:\\zap-reports\\\"; Get-ChildItem \\\"C:\\zap-reports\\\" | Select-Object Name, Length"]}' \
+            --timeout-seconds 1800 \
             --output text \
             --query "Command.CommandId")
           echo "Command ID: $COMMAND_ID"
@@ -101,17 +101,17 @@ jobs:
             fi
             sleep 5
           done
-          echo "=== ZAP Full Scan Output ==="
+          echo "=== ZAP Full Scan Output (SSM stdout) ==="
           aws ssm get-command-invocation \
             --command-id "$COMMAND_ID" \
             --instance-id "${{ secrets.WINDOWS_INSTANCE_ID }}" \
             --query 'StandardOutputContent' \
             --output text || echo "No output available"
-          echo "✅ ZAP full scan completed on Windows server"
+          echo "✅ ZAP full scan command completed on Windows server"
       - name: Download Full Scan Reports from Windows Server
         run: |
           mkdir -p ./zap-reports
-          for ext in html pdf; do
+          for ext in html json; do
             COPY_COMMAND_ID=$(aws ssm send-command \
               --instance-ids "${{ secrets.WINDOWS_INSTANCE_ID }}" \
               --document-name "AWS-RunPowerShellScript" \
