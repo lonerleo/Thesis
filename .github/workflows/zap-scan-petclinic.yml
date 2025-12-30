@@ -86,7 +86,7 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ secrets.WINDOWS_INSTANCE_ID }}" \
             --document-name "AWS-RunPowerShellScript" \
-            --parameters 'commands=["Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; if (-not (Test-Path \"C:\zap-reports\")) { New-Item -ItemType Directory -Path \"C:\zap-reports\" -Force | Out-Null }; cd \"C:\Program Files\ZAP\Zed Attack Proxy\"; Write-Host \"=== Running ZAP Baseline Scan ===\"; .\\zap.bat -cmd -quickurl http://13.49.91.130:8082/petclinic -quickout \"C:\zap-reports\petclinic-report.html\" -quickprogress *>&1 | Tee-Object \"C:\zap-reports\zap-output.txt\"; Write-Host \"=== Scan completed ===\"; if (Test-Path \"C:\zap-reports\petclinic-report.html\") { Write-Host \"SUCCESS: Report created\"; $size = (Get-Item \"C:\zap-reports\petclinic-report.html\").Length; Write-Host \"Report size: $size bytes\" } else { Write-Host \"ERROR: No report found\"; Write-Host \"Files in C:\zap-reports:\"; Get-ChildItem \"C:\zap-reports\" | Select-Object Name, Length; Write-Host \"--- zap-output.txt ---\"; if (Test-Path \"C:\zap-reports\zap-output.txt\") { Get-Content \"C:\zap-reports\zap-output.txt\" } }"]' \
+            --parameters 'commands=["Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; if (-not (Test-Path \"C:\zap-reports\")) { New-Item -ItemType Directory -Path \"C:\zap-reports\" -Force | Out-Null }; cd \"C:\Program Files\ZAP\Zed Attack Proxy\"; Write-Host \"=== Running ZAP Baseline Scan ===\"; .\\zap.bat -cmd -quickurl http://13.49.91.130:8082/petclinic -quickout \"C:\zap-reports\baseline-report.html\" -quickprogress *>&1 | Tee-Object \"C:\zap-reports\zap-output.txt\"; Write-Host \"=== Scan completed ===\"; if (Test-Path \"C:\zap-reports\baseline-report.html\") { Write-Host \"SUCCESS: Report created\"; $size = (Get-Item \"C:\zap-reports\baseline-report.html\").Length; Write-Host \"Report size: $size bytes\" } else { Write-Host \"ERROR: No report found\"; Write-Host \"Files in C:\zap-reports:\"; Get-ChildItem \"C:\zap-reports\" | Select-Object Name, Length; Write-Host \"--- zap-output.txt ---\"; if (Test-Path \"C:\zap-reports\zap-output.txt\") { Get-Content \"C:\zap-reports\zap-output.txt\" } }"]' \
             --timeout-seconds 600 \
             --output text \
             --query "Command.CommandId")
@@ -118,7 +118,7 @@ jobs:
           COPY_COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ secrets.WINDOWS_INSTANCE_ID }}" \
             --document-name "AWS-RunPowerShellScript" \
-            --parameters 'commands=["if (Test-Path \"C:\\zap-reports\\petclinic-report.html\") { [Convert]::ToBase64String([System.IO.File]::ReadAllBytes(\"C:\\zap-reports\\petclinic-report.html\")) } else { Write-Host \"REPORT_NOT_FOUND\" }"]' \
+            --parameters 'commands=["if (Test-Path \"C:\\zap-reports\\baseline-report.html\") { [Convert]::ToBase64String([System.IO.File]::ReadAllBytes(\"C:\\zap-reports\\baseline-report.html\")) } else { Write-Host \"REPORT_NOT_FOUND\" }"]' \
             --output text \
             --query "Command.CommandId")
           echo "Waiting for report download..."
@@ -140,7 +140,7 @@ jobs:
             --output text 2>/dev/null || echo "")
           echo "Report content preview: ${REPORT_BASE64:0:100}..."
           if [ ! -z "$REPORT_BASE64" ] && [ "$REPORT_BASE64" != "REPORT_NOT_FOUND" ]; then
-            echo "$REPORT_BASE64" | tr -d '\n\r ' | base64 -d > ./zap-reports/petclinic-report.html 2>/dev/null && \
+            echo "$REPORT_BASE64" | tr -d '\n\r ' | base64 -d > ./zap-reports/baseline-report.html 2>/dev/null && \
               echo "✅ Report downloaded successfully" || \
               echo "⚠️ Failed to decode report"
           else

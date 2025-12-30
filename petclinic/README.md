@@ -15,4 +15,4 @@ Runbook summary:
 3) ZAP baseline scan executed via SSM on the Windows ZAP server using zap.bat, report saved to C:\zap-reports.
 4) Reports (HTML + log) are downloaded as artifacts.
 
-Trigger note: Editing this README under petclinic/** is sufficient to fire the PetClinic workflow on push/PR.
+Trigger note: Editing this README under petclinic/** is sufficient to fire the PetClinic workflow on push/PR..
