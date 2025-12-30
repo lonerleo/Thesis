@@ -1,3 +1,4 @@
+
 name: PetClinic ZAP DAST Scan
 
 on:
@@ -17,7 +18,7 @@ on:
     - cron: '0 2 * * *'
 
 env:
-  PETCLINIC_HOST: '13.49.91.130' # Change to your PetClinic EC2 IP
+  PETCLINIC_HOST: '13.49.91.130'
   PETCLINIC_PORT: '8081'
   ZAP_HOST: '51.21.57.0'
   TARGET_URL: ${{ inputs.target_url != '' && inputs.target_url || 'http://13.49.91.130:8081' }}
@@ -36,16 +37,17 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ env.PETCLINIC_HOST }} >> ~/.ssh/known_hosts
-      - name: Deploy PetClinic to EC2
+      - name: Deploy PetClinic Application to EC2
         run: |
           echo "Deploying PetClinic to ${{ env.PETCLINIC_HOST }}..."
-          scp -i ~/.ssh/id_rsa petclinic/docker-compose.yml ubuntu@${{ env.PETCLINIC_HOST }}:/home/ubuntu/petclinic-docker-compose.yml
           ssh -i ~/.ssh/id_rsa ubuntu@${{ env.PETCLINIC_HOST }} << 'EOF'
-            echo "Stopping existing PetClinic container (if any)..."
-            sudo docker stop petclinic || true
-            sudo docker rm petclinic || true
+            echo "Pulling latest PetClinic image..."
+            sudo docker pull springcommunity/spring-petclinic-rest:latest
+            echo "Stopping existing PetClinic container..."
+            sudo docker stop $(sudo docker ps -q --filter ancestor=springcommunity/spring-petclinic-rest) || true
+            sudo docker rm $(sudo docker ps -aq --filter ancestor=springcommunity/spring-petclinic-rest) || true
             echo "Starting new PetClinic container on port 8081..."
-            sudo docker compose -f /home/ubuntu/petclinic-docker-compose.yml up -d
+            sudo docker run -d --name petclinic -p 8081:8080 springcommunity/spring-petclinic-rest:latest
             echo "Waiting for PetClinic to be ready..."
             sleep 30
             echo "PetClinic deployment completed!"
@@ -62,151 +64,14 @@ jobs:
             sleep 10
           done
           echo "❌ PetClinic is not responding"
+          echo "--- TROUBLESHOOT: Printing Docker logs from EC2 ---"
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ env.PETCLINIC_HOST }} 'sudo docker ps -a; sudo docker logs petclinic || echo "No logs found for petclinic container"'
           exit 1
 
-  zap-scan-via-ssm:
-    name: ZAP Scan from Windows Server via SSM
-    runs-on: ubuntu-latest
-    needs: deploy-petclinic
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-north-1
-      - name: Run ZAP Scan via Systems Manager
-        id: run-zap
-        run: |
-          echo "Triggering ZAP scan on Windows server via SSM..."
-          echo "Target: PetClinic at ${{ env.PETCLINIC_HOST }}:${{ env.PETCLINIC_PORT }}"
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "${{ secrets.WINDOWS_INSTANCE_ID }}" \
-            --document-name "AWS-RunPowerShellScript" \
-            --parameters 'commands=["Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; if (-not (Test-Path \"C:\zap-reports\")) { New-Item -ItemType Directory -Path \"C:\zap-reports\" -Force | Out-Null }; cd \"C:\Program Files\ZAP\Zed Attack Proxy\"; Write-Host \"=== Running ZAP Baseline Scan ===\"; .\\zap.bat -cmd -quickurl http://${{ env.PETCLINIC_HOST }}:${{ env.PETCLINIC_PORT }} -quickout \"C:\zap-reports\petclinic-report.html\" -quickprogress *>&1 | Tee-Object \"C:\zap-reports\zap-output.txt\"; Write-Host \"=== Scan completed ===\"; if (Test-Path \"C:\zap-reports\petclinic-report.html\") { Write-Host \"SUCCESS: Report created\"; $size = (Get-Item \"C:\zap-reports\petclinic-report.html\").Length; Write-Host \"Report size: $size bytes\" } else { Write-Host \"ERROR: No report found\"; Write-Host \"Files in C:\zap-reports:\"; Get-ChildItem \"C:\zap-reports\" | Select-Object Name, Length; Write-Host \"--- zap-output.txt ---\"; if (Test-Path \"C:\zap-reports\zap-output.txt\") { Get-Content \"C:\zap-reports\zap-output.txt\" } }"]' \
-            --timeout-seconds 600 \
-            --output text \
-            --query "Command.CommandId")
-          echo "Command ID: $COMMAND_ID"
-          echo "command_id=$COMMAND_ID" >> $GITHUB_OUTPUT
-          echo "Waiting for scan to complete..."
-          for i in {1..60}; do
-            STATUS=$(aws ssm get-command-invocation \
-              --command-id "$COMMAND_ID" \
-              --instance-id "${{ secrets.WINDOWS_INSTANCE_ID }}" \
-              --query 'Status' \
-              --output text 2>/dev/null || echo "Pending")
-            echo "Status: $STATUS (attempt $i/60)"
-            if [ "$STATUS" = "Success" ] || [ "$STATUS" = "Failed" ]; then
-              break
-            fi
-            sleep 5
-          done
-          echo "=== ZAP Scan Output ==="
-          aws ssm get-command-invocation \
-            --command-id "$COMMAND_ID" \
-            --instance-id "${{ secrets.WINDOWS_INSTANCE_ID }}" \
-            --query 'StandardOutputContent' \
-            --output text || echo "No output available"
-          echo "✅ ZAP scan completed on Windows server"
-      - name: Download Reports from Windows Server
-        run: |
-          mkdir -p ./zap-reports
-          COPY_COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "${{ secrets.WINDOWS_INSTANCE_ID }}" \
-            --document-name "AWS-RunPowerShellScript" \
-            --parameters 'commands=["if (Test-Path \"C:\\zap-reports\\petclinic-report.html\") { [Convert]::ToBase64String([System.IO.File]::ReadAllBytes(\"C:\\zap-reports\\petclinic-report.html\")) } else { Write-Host \"REPORT_NOT_FOUND\" }"]' \
-            --output text \
-            --query "Command.CommandId")
-          echo "Waiting for report download..."
-          for i in {1..12}; do
-            STATUS=$(aws ssm get-command-invocation \
-              --command-id "$COPY_COMMAND_ID" \
-              --instance-id "${{ secrets.WINDOWS_INSTANCE_ID }}" \
-              --query 'Status' \
-              --output text 2>/dev/null || echo "Pending")
-            if [ "$STATUS" = "Success" ] || [ "$STATUS" = "Failed" ]; then
-              break
-            fi
-            sleep 5
-          done
-          REPORT_BASE64=$(aws ssm get-command-invocation \
-            --command-id "$COPY_COMMAND_ID" \
-            --instance-id "${{ secrets.WINDOWS_INSTANCE_ID }}" \
-            --query 'StandardOutputContent' \
-            --output text 2>/dev/null || echo "")
-          echo "Report content preview: ${REPORT_BASE64:0:100}..."
-          if [ ! -z "$REPORT_BASE64" ] && [ "$REPORT_BASE64" != "REPORT_NOT_FOUND" ]; then
-            echo "$REPORT_BASE64" | tr -d '\n\r ' | base64 -d > ./zap-reports/petclinic-report.html 2>/dev/null && \
-              echo "✅ Report downloaded successfully" || \
-              echo "⚠️ Failed to decode report"
-          else
-            echo "⚠️ No report generated or report not found"
-          fi
-          ls -lh ./zap-reports/ || true
-      - name: Upload ZAP Scan Reports
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: zap-petclinic-scan-reports
-          path: |
-            zap-reports/petclinic-report.html
-          retention-days: 30
-      - name: Save ZAP Scan Reports Locally
-        if: always()
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/zap-scan-results
-          cp zap-reports/petclinic-report.html $GITHUB_WORKSPACE/zap-scan-results/ 2>/dev/null || true
-          echo "Reports saved to $GITHUB_WORKSPACE/zap-scan-results"
-      - name: Display Scan Summary
-        if: always()
-        run: |
-          echo "### 🔒 ZAP Scan Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Scan completed on Windows ZAP Server via AWS Systems Manager" >> $GITHUB_STEP_SUMMARY
-          echo "🎯 Target: PetClinic at http://${{ env.PETCLINIC_HOST }}:${{ env.PETCLINIC_PORT }}" >> $GITHUB_STEP_SUMMARY
-          echo "🔒 Method: AWS SSM (No SSH ports exposed)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📊 **Reports Available:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Download from Artifacts section" >> $GITHUB_STEP_SUMMARY
-          echo "- View in ZAP GUI: RDP to 51.21.57.0" >> $GITHUB_STEP_SUMMARY
-
-  zap-full-scan:
-    name: ZAP Full Scan (PetClinic)
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Create ZAP reports directory
-        run: mkdir -p zap-reports
-      - name: ZAP Full Scan
-        uses: zaproxy/action-full-scan@v0.10.0
-        with:
-          target: ${{ env.TARGET_URL }}
-          rules_file_name: 'zap-rules.tsv'
-          cmd_options: '-a -j -l INFO'
-          issue_title: 'ZAP Full Scan Report (PetClinic)'
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fail_action: false
-          allow_issue_writing: true
-      - name: Upload ZAP Full Scan Report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: zap-petclinic-full-scan-report
-          path: |
-            report_html.html
-            report_json.json
-            report_md.md
-          retention-days: 30
   zap-full-scan-via-ssm:
     name: ZAP Full Scan from Windows Server via SSM
     runs-on: ubuntu-latest
     needs: deploy-petclinic
-    # Run on all triggers (push, PR, schedule, workflow_dispatch)
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
