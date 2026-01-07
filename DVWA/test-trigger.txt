@@ -1,2 +1,2 @@
 # TEST COMMENT: Trigger DVWA workflow only
-# Trigger DVWA pipeline (2026-06-01).
+# Trigger DVWA pipeline (2026-06-02).
